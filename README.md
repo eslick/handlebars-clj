@@ -2,13 +2,13 @@
 
 This simple [Clojure](http://clojure.org) library extends
 [Hiccup](https://github.com/weavejester/hiccup) expressions to support
-[handlebars](http://www.handlebarsjs.com/) style templating.  We'll
-call these extended expressions HB templates.
+[Handlebars.js](http://www.handlebarsjs.com/) style templating.  
  
-The only good reason to use HB templates is if you want to define and
-use templates in clojure code that you can use either on the server or
-the client, otherwise you'd be much better off sticking with straight
-Clojure for injecting clojure values into hiccup expressions!
+The only reason to use HB templates in clojure is if you want to
+manipulate templates in clojure code that you can also natively on a
+javascript client.  The alternatives it to simply stick with otherwise
+you'd be much better off sticking with straight Clojure for injecting
+clojure values into hiccup expressions!
 
 HB templates can be resolved into plain hiccup expressions on the
 server by applying a clojure map to the template, or converted into
@@ -21,6 +21,8 @@ easier to manipulate and construct templates out of component parts.
 The downside is that clojure's syntax doesn't provide a direct analog
 to the semantics of handlebar's templates.
 
+Last update: September 23rd, 2011
+
 ## Example
 
 A blog post
@@ -30,8 +32,8 @@ A blog post
        :title "My first post"
        :author {
           :firstName "Charles"
-	  :lastName  "Jolley"
-	}
+          :lastName  "Jolley"
+       }
       })
     
 The hiccup+HB template
@@ -39,10 +41,10 @@ The hiccup+HB template
     (deftemplate post-view
       [:div.entry
         [:h1 (% title)]
-	(%with author
-	  [:h2 (%str "By " (% firstName) (% lastName))])])
+        (%with author
+        [:h2 (%str "By " (% firstName) (% lastName))])])
 	  
-Resolve the template on the server
+You can resolve the template on the server,
 
     (post-view example-post)
     =>
@@ -50,11 +52,11 @@ Resolve the template on the server
       [:h1 "My first post"]
       [:h2 "By Charles Jolley"]]
 
-Or send to the client as a template
+inject handlebars compatible strings into Hiccup,
 
     (post-view)
 
-    => translates to
+    =>
 
     [:div.entry
      [:h1 "{{title}}"]
@@ -62,7 +64,11 @@ Or send to the client as a template
      [:h2 "By " "{{firstName}}" "{{lastName}}"]
      "{{/with}}"
 
-     => renders as    
+or render a complete handlebars template strings for the client.
+
+    (html (post-view))
+
+     => 
 
      <div class="entry">
        <h1>{{title}}</h1>
@@ -71,19 +77,30 @@ Or send to the client as a template
        <h2>By {{firstName}} {{lastName}}</h2>
        {{/with}}
      </div>
+
+A convenience function is provided to inject a template into your 
+existing hiccup-based page generation logic.
+
+    (inline-template name post-view)
     
-## API
+    => [:script {:type "text/x-jquery-html" :id <name>}
+         [:div.entry ...]]
+
+    
+## API and Use Cases
 
 ### Variable substitution
 
-    (% variable)
+    (% variable)                 ;; {{variable}}
 
-Standard variable substitution.  Extract the field directly from the
-context using the keyword version of the variable and replace the
-expression with it's value.  The resulting value can be any
-hiccup-compatible expression.
+This HB template expression represents standard variable substitution
+from a context map directly into the expression tree.  When the
+template is run, it extracts the field directly from the context using
+the keyword version of the variable and replace the expression with
+it's value.  The resulting value can be any hiccup-compatible
+expression.
 
-    (% variable.child1.child2)
+    (% variable.child1.child2)   ;; {{variable.child1.child2}}
 
     ;; +
     ;; {:test "Empty" :variable {:child1 {:child2 "Nested value"} :name "One deep} 
@@ -91,20 +108,71 @@ hiccup-compatible expression.
 
 Path based variable substitution.  
 
-    (% ../variable)
+    (% ../variable)              ;; {{../variable}}
 
 If you are in a nested context, you can get to the outermost data
 structure by using the parent path designation "../"
 
+### Special Forms
+
+#### str
+
+Special form to allow you to inject multiple templates inline but
+retain whitespace separation between the substituted forms when
+rendered to HTML.
+
+    (%str & forms)
+
+#### strcat
+
+Inserts the forms with intervening whitespace (e.g. join(" ")) as
+appropriate.
+
+    (%strcat & forms)
+    
+Concatenates the forms to remove whitespace, as appropriate
+
 ### Built-in Block Forms
 
-    (%with author
-      [:div (%str "By " (% firstName) (% lastName))])
+Block forms in handlebars consist of a begin and end tag and take a
+single variable as argument.  
+
+    {{#with author}}
+    <div id="{{../type}}-author">
+      <h2>By {{firstName}} {{lastName}}</h2>
+    </div>
+    {{/with}}
+      
+The tag name designates a 'helper
+function' which uses the variable value to determine how to process
+the body of the template, typically by manipulating the current
+context.
+
+#### with
+
+    (%with author                
+      [:div {:id (%strcat {{../type}} "-author")}
+        (%str "By " (% firstName) (% lastName))])
       
 Block forms change the context of any template references inside their
 body by making the new context a nested structure.  The parent
 reference allows you to get to the original outer form from an
 internal template.
+
+#### if
+
+    (%if var & forms)
+      
+Conditional form.  If slot is a non-null value, evaluate the body but
+not in any specific context
+
+#### unless
+
+    (%unless var & forms)
+
+Inverse conditional form.    
+
+#### each
 
     (%each var & forms)
     
@@ -112,22 +180,7 @@ The iteration form combines repetition with context change.  The body
 forms are duplicated once in the context of each element of the value
 referred to by var.
 
-    (%if var & forms)
-      
-Conditional form.  If slot is a non-null value, evaluate the body but
-not in any specific context
-
-    (%unless var & forms)
-
-Inverse conditional form.    
-
-    (%str & forms) 
-
-Special form to allow you to inject multiple templates inline but
-retain whitespace separation between the substituted forms when
-rendered to HTML.
-
-### Define and use templates
+### Define and use HB templates
 
     (deftemplate template-name
       <hiccup expression>)
@@ -157,11 +210,16 @@ generates a helper function '%helper-<tag>' and a macro '%<tag>' to
 simplify generating script bodies.  The function body accepts a
 variable name to lookup in the current context (use resolve-var
 
-## Notes
+## Notes and ToDo
 
 This was a quick and dirty version, so there are a few small oddities.
 
 - No support for an {{else}} clause for %if forms
-- No support for triple-slash unescaping
+- No support for triple-slash unescaped string injection
 - No integration or support for compile-time optimizations
+
+It should be reasonably easy to extend this model to support other
+templating models with similar semantics but different syntax.  I'm
+sure there are opportunities to simplify both implementation and
+interface; file tickets or pull requests on github as you see fit.  
 
