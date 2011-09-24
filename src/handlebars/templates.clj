@@ -15,7 +15,7 @@
   (assert (= (count exprs) 1))
   `(quote [%var ~@exprs]))
 
-(defn var-expr? [expr]
+(defn- var-expr? [expr]
   (and (sequential? expr)
        (= (name (first expr)) (name '%var))))
 
@@ -27,7 +27,7 @@
   (assert (>= (count exprs) 3))
   `['%block '~(first exprs) '~(second exprs) ~@(drop 2 exprs)])
 
-(defn block-expr? [expr]
+(defn- block-expr? [expr]
   (and (sequential? expr)
        (= (name (first expr)) (name '%block))))
 
@@ -37,9 +37,18 @@
   [& exprs]
   `['%str ~@exprs])
 
-(defn str-expr? [expr]
+(defn- str-expr? [expr]
   (and (sequential? expr)
        (= (name (first expr)) (name '%str))))
+
+(defmacro %strcat
+  "Special form for guaranteeing whitespace between forms on rendering"
+  [& exprs]
+  `['%strcat ~@exprs])
+
+(defn- strcat-expr? [expr]
+  (and (sequential? expr)
+       (= (name (first expr)) (name '%strcat))))
 
 
 (defmacro defhelper
@@ -59,13 +68,13 @@
 	 (defn ~longhand ~arglist
 	   ~@body))))
 
-(defn get-helper
+(defn- get-helper
   [helper]
   (assert (or (fn? helper) (symbol? helper) (keyword? helper) (string? helper)))
   (if (fn? helper) helper
       (resolve (symbol (str "%helper-" helper)))))
 
-(defn call-helper
+(defn- call-helper
   [helper var fn]
   (assert (or (fn? fn) (symbol? fn)))
   ((get-helper helper) (keyword var) fn))
@@ -79,13 +88,13 @@
 
 ;; Expressions
 
-(defn hb-tag?
+(defn- hb-tag?
   "Is this the handlebar template tag?"
   [sym]
   (and (or (symbol? sym) (keyword? sym) (string? sym))
        (= (first (str sym)) \%)))
 
-(defn hb-expr?
+(defn- hb-expr?
   "Is this hiccup expression a handlebar template expression?"
   [expr]
   (or (var-expr? expr) (block-expr? expr) (str-expr? expr)))
@@ -93,12 +102,12 @@
 
 ;; Variables
 
-(defn parent-ref?
+(defn- parent-ref?
   "Does this variable have a parent reference?"
   [var]
   (= (subs (str var) 0 3) "../"))
 
-(defn var-path
+(defn- var-path
   "Resolve the path reference to a path, as in get-in,
    ignoring the parent context reference if it exists."
   [var]
@@ -106,9 +115,10 @@
     (var-path (subs (str var) 3))
     (map keyword (str/split (str var) #"\."))))
 
-(defn resolve-var
+(defn- resolve-var
   "[%var <var>] => hiccup expression or string"
   [var]
+;;  (println "  Lookup " var)
   (let [path (var-path var)]
     (if (parent-ref? var)
       (get-in *parent-context* path)
@@ -116,30 +126,37 @@
 
 ;; Expansion handlebars.clj -> hiccup
 
-(declare expand-template)
+(declare resolve-template)
 
-(defn resolve-block
+(defn- resolve-block
   "[%block <helper> <var> & <body>] => hiccup expression or string
    Take the block expression and pass the helper a closure that
    will expand the body in a possibly modified context"
   [[tag helper var & body]]
-  (call-helper helper var *context*
+  (call-helper helper var
 	       (fn [newctx]
-		 (expand-template body newctx))))
+		 (resolve-template body newctx))))
   
-(defn resolve-hb-expr [expr]
-  (println "Walking: " expr)
+(defn- resolve-hb-expr [expr]
   (cond
    (var-expr? expr)
-   (do (println "Resolving " (second expr) " in " *context*)
-       (resolve-var (second expr)))
+   (resolve-var (second expr))
 
    (block-expr? expr)
    (resolve-block expr)
+
+   (str-expr? expr)
+   (mapcat (fn [se]
+	     (list se " "))
+	   (drop 1 expr))
+   
+   (strcat-expr? expr)
+   expr
+   
    true expr))
 
-(defn expand-template
-  "Expand a template according to context"
+(defn- resolve-template
+  "Expand a template according to the provided context"
   [template context]
   (binding [*context* context]
     (clojure.walk/prewalk resolve-hb-expr template)))
@@ -150,25 +167,60 @@
 
 ;; Rendering handlebars.clj -> html+handlebars.js
 
-(defn render-hb-expr [expr]
-  (println "Walking: " expr)
-  (cond
-   (var-expr? expr)
-   (str "{{" (second expr) "}}")
+(declare render-template*)
 
-   (block-expr? expr)
-   (str "{{#" (second expr) " " (nth expr 2) "}}")
+(defn hiccup-expr? [expr]
+  (and (vector? expr)
+       (keyword? (first expr))
+       (or (not (map? (second expr))) (>= (count expr) 2))))
 
-   (str-expr? expr)
-   
-   true expr))
+(defmacro with-hiccup-expr 
+  "Hiccup has expressions of the form [:div [options} body ...],
+   bind key elements inside the body"
+  [[t o e] temp & body]
+  `(let [[t# o# & b#] ~temp
+	 ~t t#
+	 ~o (when (map? o#) o#)
+	 ~e (if ~o b# (cons o# b#))]
+     ~@body))
 
-(defn render-template
+(defn- render-options [map]
+  (zipmap (keys map)
+	  (mapcat render-template* (vals map))))
+
+;; NOTE: abstract into multi method dispatch?
+(defn- render-template*
   "Expand a template into a valid hiccup expression with
    handlebar expressions embedded inside"
-  [template]
-  (clojure.walk/prewalk render-hb-expr template))
+  [expr]
+;;  (println "Walk: " expr)
+  (cond
+   (hiccup-expr? expr)
+   (with-hiccup-expr [tag opts exprs] expr
+     (list (vec (concat (if opts (list tag (render-options opts)) (list tag))
+			(mapcat render-template* exprs)))))
+   (var-expr? expr)
+   (list (str "{{" (second expr) "}}"))
 
+   (block-expr? expr)
+   (concat (list (str "{{#" (second expr) " " (nth expr 2) "}}"))
+	   (mapcat render-template* (drop 3 expr))
+	   (list (str "{{/" (second expr) "}}")))
+
+   (str-expr? expr)
+   (interleave
+    (mapcat render-template* (drop 1 expr))
+    (repeat (- (count expr) 1) " "))
+
+   (strcat-expr? expr)
+   (list (mapcat render-template* (rest expr)))
+
+   true
+   (list expr)))
+				     
+(defn- render-template [template]
+  (first (render-template* template)))
+  
 ;; ===================
 ;; Built-in Helpers
 ;; ===================
@@ -208,25 +260,57 @@
 ;; Handlebar API
 ;; ================
 
-(defn render-html
-  "Render a handlebar structure or compiled template as
-   as HTML, using the context to expand the template"
-  [template context]
-  (binding [*parent-context* context]
-    (expand-template template context)))
+(defn- get-template [temp]
+  (cond
+   (string? temp) ((resolve (symbol temp)) :raw)
+   (symbol? temp) ((resolve temp) :raw)
+   (fn? temp) (temp :raw)
+   true temp))
 
-(defn render-template
-  "Render a structure or compiled template as a Handlebar
-   template suitable for client-side handlebar.js"
+(defn apply-template
+  "Render a handlebar structure as HTML, using the context to expand
+  the template or render it with handlebar strings suitable for a
+  client template library if no context provided."
+  ([template]
+     (render-template (get-template template)))
+  ([template context]
+     (binding [*parent-context* context]
+       (resolve-template (get-template template) context))))
+
+(defn inline-template
+  "Inject a template as a script element into a larger hiccup expression"
+  ([name template context type]
+     `[:script {:type ~(if (= type :default)
+			 "text/javascript"
+			 type)
+		:id ~name}
+       "/* <![CDATA[ */"
+       ~@(if context
+	   (apply-template template context)
+	   (apply-template template))
+       "/* ]]> */"])
+  ([name template context-or-type]
+     (if (map? context-or-type)
+       (inline-template name template context-or-type :default)
+       (inline-template name template nil context-or-type)))
+  ([name template]
+     (inline-template name template nil :default)))
+
+(defn html-template
+  "Return the template as an HTML string"
   [template]
-  (render-template template))
+  (html (apply-template template)))
 
 ;;
 ;; Syntactic sugar around template definitions
 ;;
 
 (defmacro deftemplate [name & body]
-  `(let [template# (html ',@body)]
-     (defn name
-       ([context] (render-html template# context))
-       ([]       (render-template template)))))
+  (assert (= (count body) 1))
+  `(let [template# ~(first body)]
+     (defn ~name
+       ([context#]
+	  (if (= context# :raw)
+	    template#
+	    (apply-template template# context#)))
+       ([]  (apply-template template#)))))
