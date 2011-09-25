@@ -122,11 +122,12 @@
 (defn- resolve-var
   "[%var <var>] => hiccup expression or string"
   [var]
-;;  (println "  Lookup " var)
-  (let [path (var-path var)]
-    (if (parent-ref? var)
-      (get-in *parent-context* path)
-      (get-in *context* path))))
+  (if (= (str var) "this")
+    *context*
+    (let [path (var-path var)]
+      (if (parent-ref? var)
+	(get-in *parent-context* path)
+	(get-in *context* path)))))
 
 ;; Expansion handlebars.clj -> hiccup
 
