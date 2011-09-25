@@ -139,8 +139,8 @@
    will expand the body in a possibly modified context"
   [[tag helper var & body]]
   (call-helper helper var
-	       (fn [newctx]
-		 (resolve-template body newctx))))
+	       (fn [ctx]
+		  (resolve-template body ctx))))
   
 (defn- resolve-hb-expr [expr]
   (cond
@@ -154,10 +154,10 @@
    (mapcat (fn [se]
 	     (list se " "))
 	   (drop 1 expr))
-   
+
    (strcat-expr? expr)
    expr
-   
+
    true expr))
 
 (defn- resolve-template
@@ -198,7 +198,6 @@
   "Expand a template into a valid hiccup expression with
    handlebar expressions embedded inside"
   [expr]
-;;  (println "Walk: " expr)
   (cond
    (hiccup-expr? expr)
    (with-hiccup-expr [tag opts exprs] expr
@@ -238,27 +237,28 @@
 (defhelper each
   "{{#each person}}...{{/each}} => (%each person & body)"
   [var fn]
-  (mapcat fn (resolve-var var)))
+  (map fn (resolve-var var)))
+
+(defhelper if
+  "{{#if person}}...{{else}}...{{/if}} => (%if person & body) (%else person & else)"
+  [var fn]
+  (when (resolve-var var)
+    (fn *context*)))
 
 (defhelper unless
   "{{#unless person}}{{/unless}} => (%unless person & body)"
    [var fn]
    (let [val (resolve-var var)]
      (when (not val)
-       (fn val))))
+       (fn *context*))))
 
 (defhelper else
   "Synonym for %unless"
    [var fn]
    (let [val (resolve-var var)]
      (when (not val)
-       (fn val))))
+       (fn *context*))))
 
-(defhelper if
-  "{{#if person}}...{{else}}...{{/if}} => (%if person & body) (%else person & else)"
-  [var fn]
-  (when-let [new-ctx (resolve-var var)]
-    (fn new-ctx)))
 
 
 ;; ================

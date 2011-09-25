@@ -30,3 +30,24 @@
       "Direct clojure subst into tag options")
   (is (= "<p id=\"test123\">Empty</p>" (html (s2-temp s2-ctx)))
       "Direct clojure subst into html"))
+
+;; Try all the block commands in one go - smoke test!
+
+(deftemplate s3-temp
+  [:div
+   [:h1 {:class (% type)} (% title)]
+   [:div.optional
+     (%if author
+       [:h2 (%with author
+	       (%str "By " (% firstName) (% lastName)))])
+     (%unless author
+       [:h2 "Anonymous"])]
+   [:div.post-body
+     (%each body
+       [:p (% this)])]])
+
+(def s3-ctx
+  {:title "My blog post"
+   :type "headline"
+   :author {:firstName "Ian" :lastName "Eslick"}
+   :body ["This is paragraph 1" "This is paragraph 2"]})
