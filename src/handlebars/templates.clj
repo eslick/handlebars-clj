@@ -17,6 +17,7 @@
 
 (defn- var-expr? [expr]
   (and (sequential? expr)
+       (not (sequential? (first expr)))
        (= (name (first expr)) (name '%var))))
 
 
@@ -29,6 +30,7 @@
 
 (defn- block-expr? [expr]
   (and (sequential? expr)
+       (not (sequential? (first expr)))
        (= (name (first expr)) (name '%block))))
 
 
@@ -39,6 +41,7 @@
 
 (defn- str-expr? [expr]
   (and (sequential? expr)
+       (not (sequential? (first expr)))
        (= (name (first expr)) (name '%str))))
 
 (defmacro %strcat
@@ -48,6 +51,7 @@
 
 (defn- strcat-expr? [expr]
   (and (sequential? expr)
+       (not (sequential? (first expr)))
        (= (name (first expr)) (name '%strcat))))
 
 
