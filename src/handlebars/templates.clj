@@ -81,7 +81,7 @@
 (defn- call-helper
   [helper var fn]
   (assert (or (fn? fn) (symbol? fn)))
-  ((get-helper helper) (keyword var) fn))
+  ((get-helper helper) var fn))
 
 ;; ============================================
 ;; Applying templates to contexts
