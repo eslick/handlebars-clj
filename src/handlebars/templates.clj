@@ -289,11 +289,12 @@
 			 "text/javascript"
 			 type)
 		:id ~name}
-       "/* <![CDATA[ */"
-       ~@(if context
-	   (apply-template template context)
-	   (apply-template template))
-       "/* ]]> */"])
+;;       "/* <![CDATA[ */"
+       ~(if context
+	  (apply-template template context)
+	  (apply-template template))
+       ])
+;;       "/* ]]> */"])
   ([name template context-or-type]
      (if (map? context-or-type)
        (inline-template name template context-or-type :default)
@@ -310,6 +311,18 @@
 ;; Syntactic sugar around template definitions
 ;;
 
+(def templates (atom nil))
+
+(defn update-template [name fn]
+  (assert (string? name))
+  (swap! templates assoc name fn))
+
+(defn get-template [name]
+  (@templates name))
+
+(defn all-templates []
+  @templates)
+
 (defmacro deftemplate [name & body]
   (assert (= (count body) 1))
   `(let [template# ~(first body)]
@@ -318,4 +331,6 @@
 	  (if (= context# :raw)
 	    template#
 	    (apply-template template# context#)))
-       ([]  (apply-template template#)))))
+       ([]  (apply-template template#)))
+     (update-template (name '~name) ~name)
+     ~name))
