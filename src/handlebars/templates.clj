@@ -265,7 +265,7 @@
 ;; Handlebar API
 ;; ================
 
-(defn- get-template [temp]
+(defn- raw-template [temp]
   (cond
    (string? temp) ((resolve (symbol temp)) :raw)
    (symbol? temp) ((resolve temp) :raw)
@@ -277,7 +277,7 @@
   the template or render it with handlebar strings suitable for a
   client template library if no context provided."
   ([template]
-     (render-template (get-template template)))
+     (render-template (raw-template template)))
   ([template context]
      (binding [*parent-context* context]
        (resolve-template (get-template template) context))))
