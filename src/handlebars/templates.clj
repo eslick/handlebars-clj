@@ -5,6 +5,35 @@
 	[clojure.walk])
   (:require [clojure.string :as str]))
 
+
+;;
+;; Syntactic sugar around template definitions
+;;
+
+(def templates (atom nil))
+
+(defn update-template [name fn]
+  (assert (string? name))
+  (swap! templates assoc name fn))
+
+(defn get-template [name]
+  (@templates name))
+
+(defn all-templates []
+  @templates)
+
+(defmacro deftemplate [name & body]
+  (assert (= (count body) 1))
+  `(let [template# ~(first body)]
+     (defn ~name
+       ([context#]
+	  (if (= context# :raw)
+	    template#
+	    (apply-template template# context#)))
+       ([]  (apply-template template#)))
+     (update-template (name '~name) ~name)
+     ~name))
+
 ;; =============================
 ;; Hiccup Shorthand and Helpers
 ;; =============================
@@ -259,8 +288,6 @@
      (when (not val)
        (fn *context*))))
 
-
-
 ;; ================
 ;; Handlebar API
 ;; ================
@@ -307,30 +334,3 @@
   [template]
   (html (apply-template template)))
 
-;;
-;; Syntactic sugar around template definitions
-;;
-
-(def templates (atom nil))
-
-(defn update-template [name fn]
-  (assert (string? name))
-  (swap! templates assoc name fn))
-
-(defn get-template [name]
-  (@templates name))
-
-(defn all-templates []
-  @templates)
-
-(defmacro deftemplate [name & body]
-  (assert (= (count body) 1))
-  `(let [template# ~(first body)]
-     (defn ~name
-       ([context#]
-	  (if (= context# :raw)
-	    template#
-	    (apply-template template# context#)))
-       ([]  (apply-template template#)))
-     (update-template (name '~name) ~name)
-     ~name))
