@@ -10,7 +10,7 @@
 ;; Syntactic sugar around template definitions
 ;;
 
-(def templates (atom nil))
+(defonce templates (atom nil))
 
 (defn update-template [name fn]
   (assert (string? name))
@@ -183,9 +183,9 @@
    (mapcat (fn [se]
 	     (list se " "))
 	   (drop 1 expr))
-
+    
    (strcat-expr? expr)
-   expr
+   (apply concat expr)
 
    true expr))
 
@@ -242,11 +242,11 @@
 
    (str-expr? expr)
    (interleave
-    (mapcat render-template* (drop 1 expr))
+    (mapcat render-template* (rest expr))
     (repeat (- (count expr) 1) " "))
 
    (strcat-expr? expr)
-   (list (mapcat render-template* (rest expr)))
+   (mapcat render-template* (rest expr))
 
    true
    (list expr)))
