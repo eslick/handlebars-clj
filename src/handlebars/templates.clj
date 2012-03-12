@@ -6,9 +6,9 @@
   (:require [clojure.string :as str]))
 
 
-;;
-;; Syntactic sugar around template definitions
-;;
+;; -------------------------------
+;; Keep a global map of templates
+;; -------------------------------
 
 (defonce templates (atom nil))
 
@@ -22,9 +22,8 @@
 (defn all-templates []
   @templates)
 
-(defmacro deftemplate [name & body]
-  (assert (= (count body) 1))
-  `(let [template# ~(first body)]
+(defmacro deftemplate [name body]
+  `(let [template# ~body]
      (defn ~name
        ([context#]
 	  (if (= context# :raw)
@@ -34,9 +33,9 @@
      (update-template (name '~name) ~name)
      ~name))
 
-;; =============================
+;; -------------------------------
 ;; Hiccup Shorthand and Helpers
-;; =============================
+;; -------------------------------
 
 (defmacro %
   "Support {{ctx-expr}} as (% ctx.child)"
@@ -112,14 +111,15 @@
   (assert (or (fn? fn) (symbol? fn)))
   ((get-helper helper) var fn))
 
-;; ============================================
+;; --------------------------------
 ;; Applying templates to contexts
-;; ============================================
+;; --------------------------------
 
 (def ^:dynamic *parent-context* nil)
 (def ^:dynamic *context* nil)
 
-;; Expressions
+
+;; ## Expressions
 
 (defn- hb-tag?
   "Is this the handlebar template tag?"
@@ -133,12 +133,14 @@
   (or (var-expr? expr) (block-expr? expr) (str-expr? expr)))
 
 
-;; Variables
+;; ## Variables
 
 (defn- parent-ref?
   "Does this variable have a parent reference?"
   [var]
-  (= (subs (str var) 0 3) "../"))
+  (let [s (str var)]
+    (and (>= (count s) 3)
+         (= (subs s 0 3) "../"))))
 
 (defn- var-path
   "Resolve the path reference to a path, as in get-in,
@@ -158,7 +160,7 @@
 	(get-in *parent-context* path)
 	(get-in *context* path)))))
 
-;; Expansion handlebars.clj -> hiccup
+;; ## Expansion handlebars.clj -> hiccup
 
 (declare resolve-template)
 
@@ -187,6 +189,9 @@
    (strcat-expr? expr)
    (apply concat expr)
 
+   (fn? expr)
+   (expr :raw)
+   
    true expr))
 
 (defn- resolve-template
@@ -195,11 +200,9 @@
   (binding [*context* context]
     (clojure.walk/prewalk resolve-hb-expr template)))
 
-;; ======================================================
+;;------------------------------------------------------
 ;; Render Handlebar Template as valid Hiccup Expression
-;; ======================================================
-
-;; Rendering handlebars.clj -> html+handlebars.js
+;;------------------------------------------------------
 
 (declare render-template*)
 
@@ -303,11 +306,11 @@
   "Render a handlebar structure as HTML, using the context to expand
   the template or render it with handlebar strings suitable for a
   client template library if no context provided."
-  ([template]
-     (render-template (raw-template template)))
   ([template context]
      (binding [*parent-context* context]
-       (resolve-template (get-template template) context))))
+       (resolve-template (raw-template template) context)))
+  ([template]
+     (render-template (raw-template template))))
 
 (defn inline-template
   "Inject a template as a script element into a larger hiccup expression"
