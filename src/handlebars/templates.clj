@@ -61,7 +61,6 @@
        (not (sequential? (first expr)))
        (= (name (first expr)) (name '%block))))
 
-
 (defmacro %str
   "Special form for guaranteeing whitespace between forms on rendering"
   [& exprs]
@@ -82,6 +81,16 @@
        (not (sequential? (first expr)))
        (= (name (first expr)) (name '%strcat))))
 
+(defmacro %code
+  "Support {{{ctx-expr}}} as (%code ctx.child)"
+  [& exprs]
+  (assert (= (count exprs) 1))
+  `(quote [%code ~@exprs]))
+
+(defn- code-expr? [expr]
+  (and (sequential? expr)
+       (not (sequential? (first expr)))
+       (= (name (first expr)) (name '%code))))
 
 (defmacro defhelper
   "Makes it easy to define your own block helper shorthand.  The tag
@@ -130,7 +139,7 @@
 (defn- hb-expr?
   "Is this hiccup expression a handlebar template expression?"
   [expr]
-  (or (var-expr? expr) (block-expr? expr) (str-expr? expr)))
+  (or (var-expr? expr) (code-expr? expr) (block-expr? expr) (str-expr? expr)))
 
 
 ;; ## Variables
@@ -175,7 +184,7 @@
   
 (defn- resolve-hb-expr [expr]
   (cond
-   (var-expr? expr)
+   (or (var-expr? expr) (code-expr? expr))
    (resolve-var (second expr))
 
    (block-expr? expr)
@@ -238,6 +247,9 @@
    (var-expr? expr)
    (list (str "{{" (second expr) "}}"))
 
+   (code-expr? expr)
+   (list (str "{{{" (second expr) "}}}"))
+   
    (block-expr? expr)
    (concat (list (str "{{#" (second expr) " " (nth expr 2) "}}"))
 	   (mapcat render-template* (drop 3 expr))
