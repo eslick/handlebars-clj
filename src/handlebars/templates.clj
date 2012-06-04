@@ -284,7 +284,10 @@
   (map fn (resolve-var var)))
 
 (defhelper if
-  "{{#if person}}...{{else}}...{{/if}} => (%if person & body) (%else person & else)"
+  "Not an easy translation, for now translate:
+   {{#if person}}...{{else}}...{{/if}} =>
+   as
+   (%if person & body) (%unless person & else) in code"
   [var fn]
   (when (resolve-var var)
     (fn *context*)))
@@ -327,16 +330,13 @@
 (defn inline-template
   "Inject a template as a script element into a larger hiccup expression"
   ([name template context type]
-     `[:script {:type ~(if (= type :default)
-			 "text/javascript"
-			 type)
-		:id ~name}
-;;       "/* <![CDATA[ */"
-       ~(if context
-	  (apply-template template context)
-	  (apply-template template))
-       ])
-;;       "/* ]]> */"])
+     [:script {:type (if (= type :default)
+                       "text/javascript"
+                       type)
+               :id name}
+      (if context
+        (apply-template template context)
+        (apply-template template))])
   ([name template context-or-type]
      (if (map? context-or-type)
        (inline-template name template context-or-type :default)
