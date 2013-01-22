@@ -4,16 +4,15 @@ This simple [Clojure](http://clojure.org) library extends
 [Hiccup](https://github.com/weavejester/hiccup) expressions to support
 [Handlebars.js](http://www.handlebarsjs.com/) style templating.  
  
-The only reason to use HB templates in clojure is if you want to
-manipulate templates in clojure code that you can also natively on a
-javascript client.  The alternatives it to simply stick with otherwise
-you'd be much better off sticking with straight Clojure for injecting
-clojure values into hiccup expressions!
+The only reason to use HB templates in Clojure is if you want to
+manipulate templates in both Clojure and Javascript environments
+and want to edit them in a single place (e.g. Clojure server-side code),
+otherwise you'd be better off using plain Hiccup.
 
 HB templates can be resolved into plain hiccup expressions on the
-server by applying a clojure map to the template, or converted into
-hiccup + handlebars templating annotations and into an HTML template
-string for the client.
+server by applying a clojure map to the template function, or
+converted into hiccup + handlebars templating annotations and into an
+HTML template string for the client.
 
 One design choice was to make the templating solution part of the
 hiccup data structure tree, rather than a pure text solution so it's
@@ -21,7 +20,7 @@ easier to manipulate and construct templates out of component parts.
 The downside is that clojure's syntax doesn't provide a direct analog
 to the semantics of handlebar's templates.
 
-Last update: September 23rd, 2011
+Last update: January 21st, 2013
 
 ## Example
 
@@ -184,6 +183,7 @@ referred to by var.
 
     (deftemplate template-name
       <hiccup expression>)
+	=> fn
       
     (template-name context) => hiccup expression
     
@@ -212,7 +212,7 @@ variable name to lookup in the current context (use resolve-var
 
 ## Notes and ToDo
 
-This was a quick and dirty version, so there are a few small oddities.
+This was a quick and dirty version, so there are a few small issues:
 
 - No support for an {{else}} clause for %if forms
 - No support for triple-slash unescaped string injection
