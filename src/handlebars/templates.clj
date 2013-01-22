@@ -22,13 +22,13 @@
 (defn all-templates []
   @templates)
 
-(defmacro deftemplate [name body]
-  `(let [template# ~body]
+(defmacro deftemplate [name & body]
+  `(let [template# (list ~@body)]
      (defn ~name
        ([context#]
-	  (if (= context# :raw)
-	    template#
-	    (apply-template template# context#)))
+          (if (= context# :raw)
+            template#
+            (apply-template template# context#)))
        ([]  (apply-template template#)))
      (update-template (name '~name) ~name)
      ~name))
@@ -240,10 +240,14 @@
    handlebar expressions embedded inside"
   [expr]
   (cond
+   (list? expr) ;; for having multiple top level forms in a template
+   (mapcat render-template* expr)
+
    (hiccup-expr? expr)
    (with-hiccup-expr [tag opts exprs] expr
      (list (vec (concat (if opts (list tag (render-options opts)) (list tag))
-			(mapcat render-template* exprs)))))
+                        (mapcat render-template* exprs)))))
+   
    (var-expr? expr)
    (list (str "{{" (second expr) "}}"))
 
@@ -267,7 +271,7 @@
    (list expr)))
 				     
 (defn- render-template [template]
-  (first (render-template* template)))
+  (render-template* template))
   
 ;; ===================
 ;; Built-in Helpers
